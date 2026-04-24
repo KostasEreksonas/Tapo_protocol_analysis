@@ -15,14 +15,18 @@
 -- You should have received a copy of the GNU General Public License
 -- along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+-- Header length of discovery packets
+local HEADER_LEN_DISCOVERY = 16
+
+-- JSON curly braces
+local JSON_OPEN_BRACE = 0x7b
+local JSON_CLOSE_BRACE = 0x7d
+
 -- Load JSON dissector
 local json = Dissector.get("json")
 
 -- Keep HTTP messages intact when dissecting TP-Link proprietary messages on port TCP/8800
 local http = DissectorTable.get("tcp.port"):get_dissector(80)
-
--- Header length of discovery packets
-local HEADER_LEN_DISCOVERY = 16
 
 local tapo_proto = Proto("tapo", "TP-Link Tapo Protocol")
 
@@ -164,9 +168,10 @@ local function dissect_content_pdu(tvb, pinfo, subtree)
     build_content_message_header(tvb, header_length, htree)
     
     -- Parse payload (JSON or encrypted media)
-    if tvb(header_length, 1):uint() == 0x7b and tvb(header_length + payload_length - 1, 1):uint() == 0x7d then
+    if tvb(header_length, 1):uint() == JSON_OPEN_BRACE and tvb(header_length + payload_length - 1, 1):uint() == JSON_CLOSE_BRACE then
         local json_tvb
         json_tvb = tvb(header_length, payload_length)
+
         -- Raw JSON text
 		subtree:add(tapo_payload_json_raw, json_tvb)
 
@@ -203,6 +208,7 @@ function tapo_proto.dissector(tvb, pinfo, tree)
     end
 end
 
+-- Assign Tapo protocol to relevant ports
 local udp_table = DissectorTable.get("udp.port")
 udp_table:add(20002, tapo_proto)
 local tcp_table = DissectorTable.get("tcp.port")
