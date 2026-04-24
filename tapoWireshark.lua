@@ -102,7 +102,7 @@ local function parse_header(tvb)
     local first, last = string.find(byte_string, delimiter, 1, true)
     local header_length = last
 
-    -- Parse header fields that has variable length
+    -- Parse header fields that have variable length
     local header_string = tvb(30, header_length):string()
     local header_fields = {}
 
@@ -126,9 +126,7 @@ local function get_content_length(tvb, pinfo, offset)
     -- Get length of Tapo protocol message (header + payload)    
     local header_length, payload_length = parse_header(tvb)
 
-    if header_length == nil then
-        pinfo.desegment_len = DESEGMENT_ONE_MORE_SEGMENT
-    elseif payload_length == nil then
+    if payload_length == nil then
         return 0
     end
 
@@ -141,9 +139,18 @@ local function build_content_message_header(tvb, header_length, htree)
     local header_string = tvb(offset, header_length):string()
 
     for split in string.gmatch(header_string, "(.-)\r\n") do
-        for key, value in string.gmatch(split, "([^:]+):([^\r\n]+)") do -- Key: value\r\n
-            htree:add(key, ":", value)
+        for key in string.gmatch(split, "([^:]+):") do
+            if key == "Content-Type" then
+                htree:add(tapo_content_type, tvb(offset, split:len()))
+            elseif key == "Content-Length" then
+                htree:add(tapo_content_length, tvb(offset, split:len()))
+            elseif key == "X-Session-Id" then
+                htree:add(tapo_x_session_id, tvb(offset, split:len()))
+            elseif key == "X-If-Encrypt" then
+                htree:add(tapo_x_if_encrypt, tvb(offset, split:len()))
+            end
         end
+        offset = offset + split:len() + 2
     end
 end
 
@@ -157,7 +164,7 @@ local function dissect_content_pdu(tvb, pinfo, subtree)
     build_content_message_header(tvb, header_length, htree)
     
     -- Parse payload (JSON or encrypted media)
-    if tvb(header_length, 1):uint() == 0x7b then
+    if tvb(header_length, 1):uint() == 0x7b and tvb(header_length + payload_length - 1, 1):uint() == 0x7d then
         local json_tvb
         json_tvb = tvb(header_length, payload_length)
         -- Raw JSON text
@@ -169,7 +176,7 @@ local function dissect_content_pdu(tvb, pinfo, subtree)
         -- Packet information
         pinfo.cols.info = "JSON Payload "
     else
-        local ptree = subtree:add(tapo_proto, tvb(header_length, payload_length), "TAPO Encrypted Payload")
+        subtree:add(tapo_proto, tvb(header_length, payload_length), "TAPO Encrypted Payload")
 
         -- Packet information
         pinfo.cols.info = "Encrypted Payload "
@@ -187,7 +194,7 @@ function tapo_proto.dissector(tvb, pinfo, tree)
     if tvb(0, 4):uint() == 0x02000001 then
         -- Dissect as TP-Link discovery packets on port UDP/20002
         dissect_tcp_pdus(tvb, subtree, HEADER_LEN_DISCOVERY, get_udp_len, udp_dissect_json_pdu, true)
-    elseif tvb(0, 4):string() == "HTTP" then
+    elseif tvb(0, 4):string() == "HTTP" or tvb(0, 4):string() == "POST" then
         -- Port TCP/8800 has some HTTP messages as well. Leave them intact.
         http:call(tvb, pinfo, tree)
     elseif tvb(0, 4):uint() == 0x2d2d2d2d then
