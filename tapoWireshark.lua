@@ -30,7 +30,7 @@ local http = DissectorTable.get("tcp.port"):get_dissector(80)
 
 local tapo_proto = Proto("tapo", "TP-Link Tapo Protocol")
 
--- Discovery message fields
+-- Discovery message fields (header + payload)
 local tapo_header = ProtoField.bytes("tapo.header", "Header RAW")
 local tapo_signature = ProtoField.uint32("tapo.signature", "Signature of Discovery Message", base.HEX_DEC)
 local tapo_payload_length = ProtoField.uint16("tapo.payload_length", "Payload Length of Discovery Message", base.DEC_HEX)
@@ -39,7 +39,7 @@ local tapo_unknown_2 = ProtoField.uint32("tapo.unknown_2", "Unknown Field 2", ba
 local tapo_crc32_checksum = ProtoField.uint32("tapo.crc32", "CRC32 cheksum (header + payload)", base.HEX_DEC)
 local tapo_payload_json_raw = ProtoField.string("tapo.data", "Raw JSON Message") 
 
--- Content message fields
+-- Control and media message fields
 local tapo_device_stream_boundary = ProtoField.string("tapo.device_stream_boundary", "Device Stream Boundary")
 local tapo_content_type = ProtoField.string("tapo.content_type", "Content Type")
 local tapo_content_length = ProtoField.string("tapo.content_length", "Content Length")
@@ -47,7 +47,7 @@ local tapo_x_session_id = ProtoField.string("tapo.session_id", "Session ID")
 local tapo_x_if_encrypt = ProtoField.string("tapo.encrypted", "Ecryption Flag")
 
 tapo_proto.fields = {
-    -- Discovery message fields
+    -- Discovery message fields (header + payload)
     tapo_header,
     tapo_payload_json_raw,
     tapo_signature,
@@ -55,7 +55,7 @@ tapo_proto.fields = {
     tapo_unknown_1,
     tapo_unknown_2,
     tapo_crc32_checksum,
-    -- Content message fields
+    -- Control and media message fields
     tapo_device_stream_boundary,
     tapo_content_type,
     tapo_content_length,
@@ -86,7 +86,7 @@ local function udp_dissect_json_pdu(tvb, pinfo, subtree)
 
 	-- Decode JSON object using built-in dissector
 	json:call(json_tvb:tvb(), pinfo, subtree)
-	
+
     -- Add JSON payload to the protocol tree
     subtree:add(tapo_payload_json_raw, json_tvb)
 
@@ -161,12 +161,12 @@ end
 local function dissect_content_pdu(tvb, pinfo, subtree)
     -- Dissect one Tapo PDU
     local header_length, payload_length = parse_header(tvb)
-    
+
     -- Populate message header tree
     local htree = subtree:add(tapo_proto, tvb(0, header_length), "TAPO Content Packet Header")
     htree:add(tapo_device_stream_boundary, tvb(0, 28))
     build_content_message_header(tvb, header_length, htree)
-    
+
     -- Parse payload (JSON or encrypted media)
     if tvb(header_length, 1):uint() == JSON_OPEN_BRACE and tvb(header_length + payload_length - 1, 1):uint() == JSON_CLOSE_BRACE then
         local json_tvb
@@ -211,5 +211,6 @@ end
 -- Assign Tapo protocol to relevant ports
 local udp_table = DissectorTable.get("udp.port")
 udp_table:add(20002, tapo_proto)
+udp_table:add(20004, tapo_proto)
 local tcp_table = DissectorTable.get("tcp.port")
 tcp_table:add(8800, tapo_proto)
