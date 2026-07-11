@@ -46,6 +46,9 @@ local tapo_content_length = ProtoField.string("tapo.content_length", "Content Le
 local tapo_x_session_id = ProtoField.string("tapo.session_id", "Session ID")
 local tapo_x_if_encrypt = ProtoField.string("tapo.encrypted", "Ecryption Flag")
 
+-- Undefined packet field
+local tapo_undefined = ProtoField.string("tapo.undefined", "Undefined Packet")
+
 tapo_proto.fields = {
     -- Discovery message fields (header + payload)
     tapo_header,
@@ -60,10 +63,11 @@ tapo_proto.fields = {
     tapo_content_type,
     tapo_content_length,
     tapo_x_session_id,
-    tapo_x_if_encrypt
+    tapo_x_if_encrypt,
+	tapo_undefined
 }
 
-local function get_udp_len(tvb)
+local function get_udp_length(tvb)
     return tvb:len()
 end
 
@@ -127,7 +131,7 @@ local function parse_header(tvb)
 end
 
 local function get_content_length(tvb, pinfo, offset)
-    -- Get length of Tapo protocol message (header + payload)    
+    -- Get length of Tapo protocol message (header + payload)
     local header_length, payload_length = parse_header(tvb)
 
     if payload_length == nil then
@@ -160,7 +164,7 @@ end
 
 local function dissect_content_pdu(tvb, pinfo, subtree)
     -- Dissect one Tapo PDU
-    local header_length, payload_length = parse_header(tvb)
+	local header_length, payload_length = parse_header(tvb)
 
     -- Populate message header tree
     local htree = subtree:add(tapo_proto, tvb(0, header_length), "TAPO Content Packet Header")
@@ -194,22 +198,53 @@ local function dissect_content_pdu(tvb, pinfo, subtree)
     pinfo.cols.protocol = tapo_proto.name
 end
 
+local function undefined_packet(tvb, pinfo, subtree)
+	-- Structure of this packet is yet to be defined
+	subtree:add(tapo_undefined, tvb(0, tvb:len()))
+
+    -- Add information to pinfo
+    pinfo.cols.protocol = tapo_proto.name
+
+	-- Add packet description
+	pinfo.cols.info = "Undefined Packet "
+end
+
+local function dissect_config_packet(tvb, pinfo, subtree)
+    local json_tvb
+    json_tvb = tvb(0, tvb:len())
+
+    -- Raw JSON text
+	subtree:add(tapo_payload_json_raw, json_tvb)
+
+	-- Decode JSON object using built-in dissector
+	json:call(json_tvb:tvb(), pinfo, subtree)
+
+    -- Packet information
+    pinfo.cols.info = "JSON Payload "
+end
+
 function tapo_proto.dissector(tvb, pinfo, tree)
     local subtree = tree:add(tapo_proto, tvb(), "TAPO Communication Protocol")
     if tvb(0, 4):uint() == 0x02000001 then
         -- Dissect as TP-Link discovery packets on port UDP/20002
-        dissect_tcp_pdus(tvb, subtree, HEADER_LEN_DISCOVERY, get_udp_len, udp_dissect_json_pdu, true)
-    elseif tvb(0, 4):string() == "HTTP" or tvb(0, 4):string() == "POST" then
+        dissect_tcp_pdus(tvb, subtree, HEADER_LEN_DISCOVERY, get_udp_length, udp_dissect_json_pdu, true)
+	elseif tvb(0, 4):uint() == 0x01f00001 then
+        dissect_tcp_pdus(tvb, subtree, HEADER_LEN_DISCOVERY, get_udp_length, undefined_packet, true)
+	elseif tvb(0, 4):string() == "HTTP" or tvb(0, 4):string() == "POST" then
         -- Port TCP/8800 has some HTTP messages as well. Leave them intact.
         http:call(tvb, pinfo, tree)
     elseif tvb(0, 4):uint() == 0x2d2d2d2d then
         -- Dissect video stream and communication service on port TCP/8800
         dissect_tcp_pdus(tvb, subtree, 0, get_content_length, dissect_content_pdu, true)
+	elseif tvb(0, 1):uint() == JSON_OPEN_BRACE then
+        -- Dissect configuration packets on port UDP/8001
+		dissect_tcp_pdus(tvb, subtree, 0, get_udp_length, dissect_config_packet, true)
     end
 end
 
 -- Assign Tapo protocol to relevant ports
 local udp_table = DissectorTable.get("udp.port")
+udp_table:add(8001, tapo_proto)
 udp_table:add(20002, tapo_proto)
 udp_table:add(20004, tapo_proto)
 local tcp_table = DissectorTable.get("tcp.port")
