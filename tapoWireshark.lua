@@ -219,6 +219,9 @@ local function dissect_config_packet(tvb, pinfo, subtree)
 	-- Decode JSON object using built-in dissector
 	json:call(json_tvb:tvb(), pinfo, subtree)
 
+    -- Add information to pinfo
+    pinfo.cols.protocol = tapo_proto.name
+
     -- Packet information
     pinfo.cols.info = "JSON Payload "
 end
