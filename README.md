@@ -12,22 +12,23 @@ Table of Contents
 
 # Filters
 
-Wireshark filters programmed for this protocol:
+The following filters are programmed for this Tapo protocol dissector:
 
-|Packet Type|Field Name|Description|
-|:---------:|:---:|:---------:|
-|Device discovery packet|tapo.header|Raw header bytes|
-|Device discovery packet|tapo.signature|Signature bytes|
-|Device discovery packet|tapo.payload_length|Payload length|
-|Device discovery packet|tapo.unknown_1|Unknown field number 1|
-|Device discovery packet|tapo.unknown_2|Unknown field number 2|
-|Device discovery packet|tapo.crc32|CRC cheksum|
-|Device discovery packet|tapo.data|Payload (JSON data)|
-|Contol/media packet|tapo.device_stream_boundary|Device stream boundary|
-|Contol/media packet|tapo.content_type|Content Type|
-|Contol/media packet|tapo.content_length|Content Length|
-|Contol/media packet|tapo.session_id|Session ID|
-|Contol/media packet|tapo.encrypted|Payload encryption flag|
+|Port|Packet Type|Field Name|Description|
+|:--:|:---------:|:---:|:---------:|
+|UDP/20002|Device discovery packet|tapo.header|Full header, saved as raw bytes|
+|UDP/20002|Device discovery packet|tapo.signature|Signature bytes|
+|UDP/20002|Device discovery packet|tapo.payload_length|Payload length|
+|UDP/20002|Device discovery packet|tapo.unknown_1|Unknown field number 1|
+|UDP/20002|Device discovery packet|tapo.unknown_2|Unknown field number 2|
+|UDP/20002|Device discovery packet|tapo.crc32|CRC cheksum|
+|UDP/20002|Device discovery packet|tapo.data|Payload (JSON data)|
+|UDP/20002|Device discovery packet|tapo.binary|Discovery packet with binary data|
+|TCP/8800|Contol/media packet|tapo.device_stream_boundary|Device stream boundary|
+|TCP/8800|Contol/media packet|tapo.content_type|Content Type|
+|TCP/8800|Contol/media packet|tapo.content_length|Content Length|
+|TCP/8800|Contol/media packet|tapo.session_id|Session ID|
+|TCP/8800|Contol/media packet|tapo.encrypted|Payload encryption flag|
 
 # Device Discovery Packets
 
@@ -35,16 +36,19 @@ Ports `UDP/20002` and `UDP/20004` are used with configuration and cryptography-r
 
 ## Header Structure
 
-For device discovery packets the header is 16 bytes long, fields of which are only partially identified as of now:
+A writeup on [command injection vulnerability within tdpServer daemon that listens on port UDP/200002](https://www.flashback.sh/blog/lao-bomb-tplink-archer-lan-rce), as well as a writeup on [remote code execution (RCE) vulnerability found in the TP-Link AC1750 Smart Wi-Fi router](https://www.synacktiv.com/publications/pwn2own-tokyo-2020-defeating-the-tp-link-ac1750), describe that a device discovery packet has 16 bytes long header with it's fields defined as follows:
 
 ![Device discovery packet header schema](images/device_discovery_packet_header_schema.png)
 
 The fields are identified as follows:
-1. **Byte 1-4:** Signature of Discovery Message.
-2. **Byte 5-6:** Payload Length of Discovery Message.
-3. **Byte 7-8:** Unknown field 1.
-4. **Byte 9-12:** Unknown field 2.
-5. **Byte 13-16:** CRC32 cheksum.
+1. **Byte 1:** Packet version.
+2. **Byte 2:** Packet type.
+3. **Bytes 3-4:** Packet opcode.
+4. **Bytes 5-6:** Packet payload length.
+5. **Byte 7:** Packet flags.
+6. **Byte 8:** Struct alignment.
+7. **Bytes 9-12:** Serial Number.
+8. **Bytes 13-16:** Checksum.
 
 Below is the header's representation in Wireshark:
 

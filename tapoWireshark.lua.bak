@@ -31,15 +31,12 @@ local http = DissectorTable.get("tcp.port"):get_dissector(80)
 local tapo_proto = Proto("tapo", "TP-Link Tapo Protocol")
 
 -- Discovery message fields (header + payload)
-local tapo_header = ProtoField.bytes("tapo.header", "RAW Header")
-local tapo_version = ProtoField.uint8("tapo.version", "Packet Version", base.HEX_DEC)
-local tapo_type = ProtoField.uint8("tapo.type", "Packet Type", base.HEX_DEC)
-local tapo_opcode = ProtoField.uint16("tapo.opcode", "Operation Code for Current Message", base.HEX_DEC)
+local tapo_header = ProtoField.bytes("tapo.header", "Header RAW")
+local tapo_signature = ProtoField.uint32("tapo.signature", "Signature of Discovery Message", base.HEX_DEC)
 local tapo_payload_length = ProtoField.uint16("tapo.payload_length", "Payload Length of Discovery Message", base.DEC_HEX)
-local tapo_flags = ProtoField.uint8("tapo.flags", "Flags for Current Message", base.HEX_DEC)
-local tapo_align = ProtoField.uint8("tapo.align", "Extra Value for Struct Alignment", base.HEX_DEC)
-local tapo_serial_number = ProtoField.uint32("tapo.serial_number", "Serial Number", base.HEX_DEC)
-local tapo_checksum = ProtoField.uint32("tapo.checksum", "Checksum", base.HEX_DEC)
+local tapo_unknown_1 = ProtoField.uint16("tapo.unknown_1", "Unknown Field 1", base.HEX_DEC)
+local tapo_unknown_2 = ProtoField.uint32("tapo.unknown_2", "Unknown Field 2", base.HEX_DEC)
+local tapo_crc32_checksum = ProtoField.uint32("tapo.crc32", "CRC32 cheksum (header + payload)", base.HEX_DEC)
 local tapo_payload_json_raw = ProtoField.string("tapo.data", "Raw JSON Message") 
 
 -- Control and media message fields
@@ -55,15 +52,12 @@ local tapo_binary = ProtoField.string("tapo.binary", "Discovery Packet With Bina
 tapo_proto.fields = {
     -- Discovery message fields (header + payload)
     tapo_header,
-    tapo_version,
-    tapo_type,
-    tapo_opcode,
-    tapo_payload_length,
-    tapo_flags,
-    tapo_align,
-    tapo_serial_number,
-    tapo_checksum,
     tapo_payload_json_raw,
+    tapo_signature,
+    tapo_payload_length,
+    tapo_unknown_1,
+    tapo_unknown_2,
+    tapo_crc32_checksum,
     -- Control and media message fields
     tapo_device_stream_boundary,
     tapo_content_type,
@@ -84,14 +78,11 @@ local function udp_dissect_json_pdu(tvb, pinfo, subtree)
 
     -- Parse separate header fields and put into a subtree
     local htree = subtree:add(tapo_proto, tvb(0, HEADER_LEN_DISCOVERY), "TAPO Discovery Packet Header")
-    htree:add(tapo_version, tvb(0, 1))
-    htree:add(tapo_type, tvb(1, 1))
-    htree:add(tapo_opcode, tvb(2, 2))
+    htree:add(tapo_signature, tvb(0, 4))
     htree:add(tapo_payload_length, tvb(4, 2))
-    htree:add(tapo_flags, tvb(6, 1))
-    htree:add(tapo_align, tvb(7, 1))
-    htree:add(tapo_serial_number, tvb(8, 4))
-    htree:add(tapo_checksum, tvb(12, 4))
+    htree:add(tapo_unknown_1, tvb(6, 2))
+    htree:add(tapo_unknown_2, tvb(8, 4))
+    htree:add(tapo_crc32_checksum, tvb(12, 4))
 
     -- Save payload as JSON
     local json_tvb
@@ -232,14 +223,14 @@ local function dissect_config_packet(tvb, pinfo, subtree)
     pinfo.cols.protocol = tapo_proto.name
 
     -- Packet information
-    pinfo.cols.info = "Keep-alive request on port TCP/8001 "
+    pinfo.cols.info = "JSON Payload "
 end
 
 function tapo_proto.dissector(tvb, pinfo, tree)
     local subtree = tree:add(tapo_proto, tvb(), "TAPO Communication Protocol")
     if tvb(0, 4):uint() == 0x02000001 then
         -- Dissect as TP-Link discovery packets on port UDP/20002
-        udp_dissect_json_pdu(tvb, pinfo, subtree)
+        dissect_tcp_pdus(tvb, subtree, HEADER_LEN_DISCOVERY, get_udp_length, udp_dissect_json_pdu, true)
 	elseif tvb(0, 4):uint() == 0x01f00001 then
         dissect_tcp_pdus(tvb, subtree, HEADER_LEN_DISCOVERY, get_udp_length, discovery_binary_packet, true)
 	elseif tvb(0, 4):string() == "HTTP" or tvb(0, 4):string() == "POST" then
@@ -250,7 +241,7 @@ function tapo_proto.dissector(tvb, pinfo, tree)
         dissect_tcp_pdus(tvb, subtree, 0, get_content_length, dissect_content_pdu, true)
 	elseif tvb(0, 1):uint() == JSON_OPEN_BRACE then
         -- Dissect configuration packets on port UDP/8001
-        dissect_config_packet(tvb, pinfo, subtree)
+		dissect_tcp_pdus(tvb, subtree, 0, get_udp_length, dissect_config_packet, true)
     end
 end
 
