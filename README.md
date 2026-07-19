@@ -1,5 +1,5 @@
 # Tapo_protocol_analysis
-(WIP) Wireshark dissector for a proprietary protocol found on TP-Link Tapo cameras, dissecting device discovery packets on ports `UDP/20002` and `UDP/20004`, as well as control and media stream packets on port `TCP/8800`. Tested on TP-Link Tapo C100 IP camera.
+(WIP) Wireshark dissector for a proprietary protocol found on TP-Link Tapo cameras, dissecting device discovery packets on ports `UDP/20002` and `UDP/20004`, as well as control and media stream packets on port `TCP/8800` and keep-alive packets on port `TCP/8001`. Tested on TP-Link Tapo C100 IP camera.
 
 Table of Contents
 =================
@@ -22,13 +22,14 @@ The following filters are programmed for this Tapo protocol dissector:
 |UDP/20002|Device discovery packet|tapo.unknown_1|Unknown field number 1|
 |UDP/20002|Device discovery packet|tapo.unknown_2|Unknown field number 2|
 |UDP/20002|Device discovery packet|tapo.crc32|CRC cheksum|
-|UDP/20002|Device discovery packet|tapo.data|Payload (JSON data)|
+|UDP/20002|Device discovery packet|tapo.data|JSON payload|
 |UDP/20002|Device discovery packet|tapo.binary|Discovery packet with binary data|
 |TCP/8800|Contol/media packet|tapo.device_stream_boundary|Device stream boundary|
 |TCP/8800|Contol/media packet|tapo.content_type|Content Type|
 |TCP/8800|Contol/media packet|tapo.content_length|Content Length|
 |TCP/8800|Contol/media packet|tapo.session_id|Session ID|
 |TCP/8800|Contol/media packet|tapo.encrypted|Payload encryption flag|
+|TCP/8001|Keep-alive packet|tapo.data|JSON payload|
 
 # Device Discovery Packets
 
