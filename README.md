@@ -17,11 +17,14 @@ The following filters are programmed for this Tapo protocol dissector:
 |Port|Packet Type|Field Name|Description|
 |:--:|:---------:|:---:|:---------:|
 |UDP/20002|Device discovery packet|tapo.header|Full header, saved as raw bytes|
-|UDP/20002|Device discovery packet|tapo.signature|Signature bytes|
+|UDP/20002|Device discovery packet|tapo.version|Packet version|
+|UDP/20002|Device discovery packet|tapo.type|Packet type|
+|UDP/20002|Device discovery packet|tapo.opcode|Operation code for current message|
 |UDP/20002|Device discovery packet|tapo.payload_length|Payload length|
-|UDP/20002|Device discovery packet|tapo.unknown_1|Unknown field number 1|
-|UDP/20002|Device discovery packet|tapo.unknown_2|Unknown field number 2|
-|UDP/20002|Device discovery packet|tapo.crc32|CRC cheksum|
+|UDP/20002|Device discovery packet|tapo.flags|Flags for current message|
+|UDP/20002|Device discovery packet|tapo.align|Extra value for struct alignment|
+|UDP/20002|Device discovery packet|tapo.serial_number|Serial number|
+|UDP/20002|Device discovery packet|tapo.checksum|Cheksum|
 |UDP/20002|Device discovery packet|tapo.data|JSON payload|
 |UDP/20002|Device discovery packet|tapo.binary|Discovery packet with binary data|
 |TCP/8800|Contol/media packet|tapo.device_stream_boundary|Device stream boundary|
